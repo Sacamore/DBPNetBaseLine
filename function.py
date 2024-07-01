@@ -48,7 +48,7 @@ def azim_proj(pos):
 
 
 def gen_images(data, args):
-    locs = loadmat('./locs_orig.mat')
+    locs = loadmat('./locs_ahu.mat')
     locs_3d = locs['data']
     locs_2d = []
     for e in locs_3d:
@@ -68,6 +68,14 @@ def gen_images(data, args):
     images = np.nan_to_num(images)
     return images
 
+def read_preprocessed_data(args):
+    train_eeg = np.load(args.data_document_path+'/train_eeg.npy')
+    train_label = np.load(args.data_document_path+'/train_label.npy')
+    val_eeg = np.load(args.data_document_path+'/val_eeg.npy')
+    val_label = np.load(args.data_document_path+'/val_label.npy')
+
+    return train_eeg,train_label,val_eeg,val_label
+    
 
 def read_prepared_data(args):
     data = []

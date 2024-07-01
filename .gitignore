@@ -1,0 +1,8 @@
+/ChineseAAD
+/pre_trained_models
+/logs
+/__pycache__
+/result
+nohup.out
+test.ipynb
+tensorboard.sh

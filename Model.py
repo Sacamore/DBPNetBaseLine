@@ -1,4 +1,5 @@
 from dotmap import DotMap
+from multiprocessing import Process
 from mne.decoding import CSP
 from utils import *
 from function import *
@@ -6,7 +7,6 @@ from model_module import *
 import numpy as np
 import torch
 from torch.utils.data import DataLoader, Dataset
-from tensorboardX import SummaryWriter
 import torch.nn as nn
 import torch.optim as optim
 from sklearn.model_selection import train_test_split
@@ -165,8 +165,6 @@ def train_model(settings, args, train_loader, valid_loader, test_loader, subject
 
     best_epoch = 1
     best_valid = float('inf')
-    # best_valid = 0
-    writer = SummaryWriter(f'./logs/{args.name}')
     for epoch in range(1, args.max_epoch + 1):
         train_loss = train(model, optimizer, criterion, scheduler)
         val_loss, val_acc = evaluate(model, criterion, test=False)
@@ -174,13 +172,10 @@ def train_model(settings, args, train_loader, valid_loader, test_loader, subject
         print("-" * 50)
         print(
             'Epoch {:2d} Finsh | Subject {} | Train Loss {:5.4f} | Valid Loss {:5.4f} | Valid Acc {:5.4f}'.format(epoch,
-                                                                                                                  args.name,
+                                                                                                                  args.subject_number,
                                                                                                                   train_loss,
                                                                                                                   val_loss,
                                                                                                                   val_acc))
-        writer.add_scalar(f'loss/train',train_loss,epoch)
-        writer.add_scalar(f'loss/valid',val_loss,epoch)
-        writer.add_scalar(f'acc/valid',val_acc)
         print("-" * 50)
         if val_loss < best_valid:
             best_valid = val_loss
@@ -189,13 +184,6 @@ def train_model(settings, args, train_loader, valid_loader, test_loader, subject
             print(f"Saved model at pre_trained_models/{save_load_name(args, name=args.name)}.pt!")
             save_model(args, model, name=args.name)
             stale = 0
-        # if val_acc > best_valid:
-        #     best_valid = val_acc
-
-        #     best_epoch = epoch
-        #     print(f"Saved model at pre_trained_models/{save_load_name(args, name=args.name)}.pt!")
-        #     save_model(args, model, name=args.name)
-        #     stale = 0
         else:
             stale += 1
             if stale > args.patience:
@@ -206,33 +194,35 @@ def train_model(settings, args, train_loader, valid_loader, test_loader, subject
     test_loss, test_acc = evaluate(model, criterion, test=True)
     print(f'Best epoch: {best_epoch}')
     print(f"Subject: {subject}, Acc: {test_acc:.2f}")
-    writer.close()
+
     return test_loss, test_acc
 
-def main(name="S15", data_document_path="./ChineseAAD/Data_for_SS/audio-video/SA", length = 1):
+def main(name="SA", data_document_path="Path", length = 5):
+    print(name)
     args = DotMap()
-    args.name = name
-    # args.subject_number = int(args.name[1:])
-    args.data_document_path = data_document_path
     args.ConType = ["No"]
     args.fs = 128
     args.window_length = math.ceil(args.fs * length)
-    args.overlap = 0.5
+    args.data_document_path = data_document_path
+    # args.log_path = "/media/data2/zhanghongyu/CNN/result/1s"
+    args.name = name
+    args.subject_number = int(args.name[1:])
+    args.file_csv = filename
     args.batch_size = 32
+    args.overlap = 0.5
     args.max_epoch = 200
     args.patience = 15
     # args.random_seed = time.time()
-    args.log_interval = 20
     args.image_size = 32
-    args.people_number = 16
+    args.people_number = 1
     args.eeg_channel = 32
     args.audio_channel = 1
     args.channel_number = args.eeg_channel + args.audio_channel * 2
-    args.trail_number = 8
-    args.cell_number = 46080
+    args.trail_number = 16
+    args.cell_number = 19456
     args.test_percent = 0.1
     args.vali_percent = 0.1
-    args.csp_comp = 32           #select appropriate value
+    args.log_interval = 20
     args.label_col = 0
 
     args.delta_low = 1
@@ -245,7 +235,12 @@ def main(name="S15", data_document_path="./ChineseAAD/Data_for_SS/audio-video/SA
     args.beta_high = 30
     args.gamma_low = 31
     args.gamma_high = 50
-    args.log_path = "./result"
+    args.csp_comp = 32           #select appropriate value
+    args.label_col = 0
+    
+
+   
+    args.log_path = "MBSSFCC-torch/result/1s"
 
 
     args.frequency_resolution = args.fs / args.window_length
@@ -263,60 +258,57 @@ def main(name="S15", data_document_path="./ChineseAAD/Data_for_SS/audio-video/SA
     logger = get_logger(args.name, args.log_path, length)
 
     # load data 和 label
-    # eeg_data, event_data = read_prepared_data(args)
-    # data = np.vstack(eeg_data)
-    # eeg_data = data.reshape([args.trail_number, -1, args.eeg_channel])
-    # event_data = np.vstack(event_data)
+    dataname = 'filename.npy'
+    labelname = 'filename.npy'
 
-    # train_eeg, test_eeg, train_label, test_label = sliding_window(eeg_data, event_data, args, args.eeg_channel)
-
-    train_eeg,train_label,test_eeg,test_label = read_preprocessed_data(args)
-    # eeg_data = np.concatenate([train_eeg,test_eeg])
-    # event_data = np.concatenate([train_label,test_label])
+# 加载.npy文件
+    train_data = np.load(filename)
+    train_label = np.load(dilename)
+   
 
     # fft
     train_data0 = to_alpha0(train_eeg, args)
-    test_data0 = to_alpha0(test_eeg, args)
+    # test_data0 = to_alpha0(test_eeg, args)
     train_data1 = to_alpha1(train_eeg, args)
-    test_data1 = to_alpha1(test_eeg, args)
+    # test_data1 = to_alpha1(test_eeg, args)
     train_data2 = to_alpha2(train_eeg, args)
-    test_data2 = to_alpha2(test_eeg, args)
+    # test_data2 = to_alpha2(test_eeg, args)
     train_data3 = to_alpha3(train_eeg, args)
-    test_data3 = to_alpha3(test_eeg, args)
+    # test_data3 = to_alpha3(test_eeg, args)
     train_data4 = to_alpha4(train_eeg, args)
-    test_data4 = to_alpha4(test_eeg, args)
+    # test_data4 = to_alpha4(test_eeg, args)
 
     # tf.split()
 
     train_data0 = gen_images(train_data0, args)
-    test_data0 = gen_images(test_data0, args)
+    # test_data0 = gen_images(test_data0, args)
     train_data1 = gen_images(train_data1, args)
-    test_data1 = gen_images(test_data1, args)
+    # test_data1 = gen_images(test_data1, args)
     train_data2 = gen_images(train_data2, args)
-    test_data2 = gen_images(test_data2, args)
+    # test_data2 = gen_images(test_data2, args)
     train_data3 = gen_images(train_data3, args)
-    test_data3 = gen_images(test_data3, args)
+    # test_data3 = gen_images(test_data3, args)
     train_data4 = gen_images(train_data4, args)
-    test_data4 = gen_images(test_data4, args)
+    # test_data4 = gen_images(test_data4, args)
 
     input_train_data = np.stack([train_data0, train_data1, train_data2, train_data3, train_data4], axis=1)
-    test_data = np.stack([test_data0, test_data1, test_data2, test_data3, test_data4], axis=1)
+    # test_data = np.stack([test_data0, test_data1, test_data2, test_data3, test_data4], axis=1)
 
     fre_train_data = np.expand_dims(input_train_data, axis=-1)
-    fre_test_data = np.expand_dims(test_data, axis=-1)
+    # fre_test_data = np.expand_dims(test_data, axis=-1)
 
-    # eeg_data = eeg_data.transpose(0, 2, 1)
-    # eeg_data = eeg_data[:, :args.eeg_channel, :]
-    # label = np.array(event_data)
-    # label = np.squeeze(label - 1)
-    # csp = CSP(n_components=args.csp_comp, reg=None, log=None, cov_est='concat', transform_into='csp_space', norm_trace=True)
-    # eeg_data = csp.fit_transform(eeg_data, label)
-    # eeg_data = eeg_data.transpose(0, 2, 1)
+    eeg_data = eeg_data.transpose(0, 2, 1)
+    eeg_data = eeg_data[:, :args.eeg_channel, :]
+    label = np.array(event_data)
+    label = np.squeeze(label - 1)
+    csp = CSP(n_components=args.csp_comp, reg=None, log=None, cov_est='concat', transform_into='csp_space', norm_trace=True)
+    eeg_data = csp.fit_transform(eeg_data, label)
+    eeg_data = eeg_data.transpose(0, 2, 1)
 
-    # train_eeg, test_eeg, train_label, test_label = sliding_window(eeg_data, label, args, args.csp_comp)
+    train_eeg, test_eeg, train_label, test_label = sliding_window(eeg_data, label, args, args.csp_comp)
     seq_train_data = np.expand_dims(train_eeg, axis=-1)
     seq_test_data = np.expand_dims(test_eeg, axis=-1)
-    # del data
+    del data
 
     np.random.seed(200)
     np.random.shuffle(fre_train_data)
@@ -363,15 +355,11 @@ def main(name="S15", data_document_path="./ChineseAAD/Data_for_SS/audio-video/SA
 
 
 if __name__ == "__main__":
-    sub_list = ['A','B','C','D','E','F','G','H']
-    mission = 'SS'
-    sub_mission = ['audio-only','audio-video']
-    path = './ChineseAAD/Data_for_' + mission
-    for sub_m in sub_mission:
-        for sub in sub_list:
-            file_path = f'{path}/{sub_m}/S{sub}'
-            if sub_m == 'audio-only':
-                name = f'{mission}_ao_S{sub}'
-            else:
-                name = f'{mission}_av_S{sub}'
-            main(name,file_path)
+    param =1
+    #folloing dataname make change
+    for i in range(0, 10):
+        name = "S" + str(i+1)
+        filename = "/media/data2/data_human/DXG/wo_v/audio-only/sub" + str(i+1) + ".csv"
+        print(filename)
+        main(name, filename, param)
+    # main()
